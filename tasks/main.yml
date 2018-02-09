@@ -1,0 +1,67 @@
+---
+- name: Install dependencies
+  apt: 
+    name: "{{item}}"
+    update_cache: yes
+  with_items:
+    - git
+    - curl
+    - build-essential
+    - libssl-dev
+  tags: nvm
+
+- name: Install nvm
+  become: yes
+  become_user: "{{ nvm.user }}"
+  git: 
+    repo: https://github.com/creationix/nvm.git
+    dest: ~/.nvm
+    version: "{{ nvm.version }}"
+  tags: nvm
+
+- name: Source nvm in Files
+  become: yes
+  become_user: "{{ nvm.user }}"
+  blockinfile:
+    dest: "{{item}}"
+    marker: "#{mark} NVM"
+    block: |
+      export NVM_DIR="$HOME/.nvm"
+      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+      [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    create: yes
+  with_items:
+    - ~/.profile
+    - ~/.bashrc
+  tags: nvm
+
+- name: Install {{ nvm.node_version }}
+  become: yes
+  become_user: "{{nvm.user}}"
+  shell: |
+        . ~/.profile > /dev/null 2>&1
+        (nvm install "{{nvm.node_version}}")
+  register: nvm_install_result
+  changed_when: "'is already installed.' not in nvm_install_result.stderr"
+  tags: nvm
+
+- name: Check if {{ nvm.node_version }} is the default node version
+  become: yes
+  become_user: "{{nvm.user}}"
+  shell: |
+        . ~/.profile > /dev/null 2>&1
+        export TERM=dumb
+        nvm ls | cat | grep -e "default -> {{ nvm.node_version }}"
+  register: nvm_check_default
+  changed_when: False
+  ignore_errors: true
+  tags: nvm
+
+- name: Set default node version to {{ nvm.node_version }}
+  become: yes
+  become_method: sudo
+  become_user: "{{nvm.user}}"
+  shell: |
+        . ~/.profile > /dev/null 2>&1
+        (nvm alias default "{{nvm.node_version}}")
+  tags: nvm
